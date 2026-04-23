@@ -1,0 +1,38 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity auto-generated metadata for IDE
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unity asset cache
+MemoryCaptures/
+Recordings/
