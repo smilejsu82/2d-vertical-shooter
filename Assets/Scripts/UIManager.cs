@@ -7,6 +7,7 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
+    public Image[] booms;
     public Image[] images;
     public GameObject gameOverPanel;
     public Button retryButton;
@@ -39,6 +40,60 @@ public class UIManager : MonoBehaviour
     void Update()
     {
         
+    }
+
+    public void IncreaseBoom()
+    {
+        Debug.Log($"[IncreaseBoom] 호출됨 | booms 배열 크기: {booms.Length}");
+
+        for (int i = 0; i < booms.Length; i++)
+        {
+            if (booms[i] == null)
+            {
+                Debug.LogWarning($"[IncreaseBoom] booms[{i}] 가 null 입니다.");
+                continue;
+            }
+
+            Color c = booms[i].color;
+            Debug.Log($"[IncreaseBoom] booms[{i}] 현재 alpha: {c.a}");
+
+            if (c.a == 0f)
+            {
+                c.a = 1f;
+                booms[i].color = c;
+                Debug.Log($"[IncreaseBoom] booms[{i}] alpha 1로 변경 완료");
+                return;
+            }
+        }
+
+        Debug.LogWarning("[IncreaseBoom] 활성화할 수 있는 슬롯이 없습니다 (모두 alpha > 0).");
+    }
+
+    public void DecreaseBoom()
+    {
+        Debug.Log($"[DecreaseBoom] 호출됨 | booms 배열 크기: {booms.Length}");
+
+        for (int i = booms.Length - 1; i >= 0; i--)
+        {
+            if (booms[i] == null)
+            {
+                Debug.LogWarning($"[DecreaseBoom] booms[{i}] 가 null 입니다.");
+                continue;
+            }
+
+            Color c = booms[i].color;
+            Debug.Log($"[DecreaseBoom] booms[{i}] 현재 alpha: {c.a}");
+
+            if (c.a > 0f)
+            {
+                c.a = 0f;
+                booms[i].color = c;
+                Debug.Log($"[DecreaseBoom] booms[{i}] alpha 0으로 변경 완료");
+                return;
+            }
+        }
+
+        Debug.LogWarning("[DecreaseBoom] 비활성화할 슬롯이 없습니다 (모두 alpha == 0).");
     }
 
     public bool DecreaseLife()
@@ -130,6 +185,12 @@ public class UIManager : MonoBehaviour
     {
         Scene currentScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(currentScene.buildIndex);
+    }
+
+    public void AddScore(int amount)
+    {
+        score += amount;
+        UpdateScoreText();
     }
 
     public void AddScoreByEnemyType(Enemy.EnemyType enemyType)

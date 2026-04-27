@@ -1941,7 +1941,9 @@ MonoBehaviour:
   fireRate: 0.1
   sideOffset: 0.5
   respawnDelay: 2
+  skillBoomPrefab: {fileID: 0}
   power: 1
+  boomCount: 0
 --- !u!95 &1268324334
 Animator:
   serializedVersion: 7
@@ -2219,6 +2221,10 @@ MonoBehaviour:
   - {fileID: 1053325659}
   - {fileID: 684571803}
   - {fileID: 487919506}
+  itemPrefabs:
+  - {fileID: 3328819131754271640, guid: 1b5667b62d0e64b43a0c2ad98ca8416f, type: 3}
+  - {fileID: 2073388300935157636, guid: b8da86224182ea140b79fbec4b996fca, type: 3}
+  - {fileID: 5413021820679370694, guid: 436f77d4f213aec4081b140a8e25880a, type: 3}
 --- !u!1 &1473481053
 GameObject:
   m_ObjectHideFlags: 0

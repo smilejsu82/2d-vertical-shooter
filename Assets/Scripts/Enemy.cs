@@ -99,14 +99,21 @@ public class Enemy : MonoBehaviour
 
         if (health <= 0)
         {
-            isDead = true;
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.AddScoreByEnemyType(enemyType);
-            }
-
-            Destroy(gameObject);
+            Die();
         }
+    }
+
+    public void Die()
+    {
+        isDead = true;
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.AddScoreByEnemyType(enemyType);
+        }
+            
+        GameManager.instance.CreateItem(transform.position);
+
+        Destroy(gameObject);
     }
 
     private Vector3 dir;
