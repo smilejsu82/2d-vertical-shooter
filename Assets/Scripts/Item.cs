@@ -16,7 +16,7 @@ public class Item : MonoBehaviour
 
         if (transform.position.y < -7.85f)
         {
-            Destroy(gameObject);
+            ObjectPoolManager.instance.ReleaseItem(gameObject);
         }
     }
 }

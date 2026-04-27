@@ -14,7 +14,11 @@ public class PlayerBullet : MonoBehaviour
     {
         transform.Translate(Vector3.up * speed * Time.deltaTime);
 
-        if (AreaDrawer.Instance != null && AreaDrawer.Instance.IsOutOfBounds(transform.position))
-            Destroy(gameObject);
+        if (transform.position.y > 5.5f)
+        {
+            ObjectPoolManager.instance.ReleaseBullet(gameObject);
+        }
+        // if (AreaDrawer.Instance != null && AreaDrawer.Instance.IsOutOfBounds(transform.position))
+        //     Destroy(gameObject);
     }
 }

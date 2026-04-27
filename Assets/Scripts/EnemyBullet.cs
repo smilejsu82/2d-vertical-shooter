@@ -11,7 +11,7 @@ public class EnemyBullet : MonoBehaviour
         transform.Translate(dir * speed * Time.deltaTime);
 
         if (AreaDrawer.Instance != null && AreaDrawer.Instance.IsOutOfBounds(transform.position))
-            Destroy(gameObject);
+            ObjectPoolManager.instance.ReleaseBullet(gameObject);
     }
 
     public void StartMove(Vector3 dir)

@@ -8,8 +8,6 @@ using System.Collections;
 public class Player : MonoBehaviour
 {
     [SerializeField] private Transform firePoint;             // 총알이 생성될 기준 위치
-    [SerializeField] private GameObject sideBulletPrefab;    // 좌우 총알 프리팹
-    [SerializeField] private GameObject centerBulletPrefab;  // 중앙 강화 총알 프리팹 (power 3 전용)
     [SerializeField] private float moveSpeed = 5f;           // 이동 속도
     [SerializeField] private float fireRate = 0.1f;          // 발사 간격 (초) — 값이 작을수록 빠르게 발사
     [SerializeField] private float sideOffset = 0.25f;       // 좌우 총알의 중앙으로부터 떨어진 거리
@@ -112,7 +110,7 @@ public class Player : MonoBehaviour
 
 
         for (int i = 0; i < enemyBullets.Length; i++)
-            Destroy(enemyBullets[i]);
+            ObjectPoolManager.instance.ReleaseBullet(enemyBullets[i]);
                                                               
         
 
@@ -170,32 +168,40 @@ public class Player : MonoBehaviour
         switch (power)
         {
             case 1: // 중앙 단발
-                SpawnBullet(sideBulletPrefab, Vector3.zero);
+                SpawnBullet(false, Vector3.zero);
                 break;
 
             case 2: // 좌우 2발
                 sideOffset = 0.1f;
-                SpawnBullet(sideBulletPrefab, Vector3.left  * sideOffset);
-                SpawnBullet(sideBulletPrefab, Vector3.right * sideOffset);
+                SpawnBullet(false, Vector3.left  * sideOffset);
+                SpawnBullet(false, Vector3.right * sideOffset);
                 break;
 
             case 3: // 중앙 강화탄 + 좌우 2발
                 sideOffset = 0.25f;
-                SpawnBullet(centerBulletPrefab, Vector3.zero);
-                SpawnBullet(sideBulletPrefab,   Vector3.left  * sideOffset);
-                SpawnBullet(sideBulletPrefab,   Vector3.right * sideOffset);
+                SpawnBullet(true,  Vector3.zero);
+                SpawnBullet(false, Vector3.left  * sideOffset);
+                SpawnBullet(false, Vector3.right * sideOffset);
                 break;
         }
     }
 
     /// <summary>
-    /// 지정한 프리팹을 firePoint 기준 offset 위치에 생성합니다.
+    /// 오브젝트 풀에서 총알을 꺼내 firePoint 기준 offset 위치에 배치합니다.
     /// </summary>
-    /// <param name="prefab">생성할 총알 프리팹</param>
+    /// <param name="isCenterBullet">true면 강화탄(bullet1), false면 기본탄(bullet0)</param>
     /// <param name="offset">firePoint로부터의 로컬 오프셋</param>
-    private void SpawnBullet(GameObject prefab, Vector3 offset)
+    private void SpawnBullet(bool isCenterBullet, Vector3 offset)
     {
-        Instantiate(prefab, firePoint.position + offset, firePoint.rotation);
+        GameObject bulletGo = isCenterBullet
+            ? ObjectPoolManager.instance.GetPlayerBullet1()
+            : ObjectPoolManager.instance.GetPlayerBullet0();
+
+        if (bulletGo == null) return;
+
+        bulletGo.transform.position = firePoint.position + offset;
+        bulletGo.transform.rotation = firePoint.rotation;
+        bulletGo.SetActive(true);
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -229,7 +235,7 @@ public class Player : MonoBehaviour
                     break;
             }
 
-            Destroy(other.gameObject);
+            ObjectPoolManager.instance.ReleaseItem(other.gameObject);
         }
 
         // 적 본체 또는 적 총알과 충돌 시 라이프 감소 + 일시 비활성화 처리
@@ -254,7 +260,10 @@ public class Player : MonoBehaviour
             _isHitProcessing = false;
         }
 
-        Destroy(other.gameObject);
+        if (other.CompareTag("EnemyBullet"))
+            ObjectPoolManager.instance.ReleaseBullet(other.gameObject);
+        else if (other.CompareTag("Enemy"))
+            ObjectPoolManager.instance.ReleaseEnemy(other.gameObject);
     }
 
     private void OnEnable()

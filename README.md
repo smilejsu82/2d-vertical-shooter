@@ -16,6 +16,7 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
   - 폭탄 스킬로 화면 내 적 전부 제거
   - 라이프 감소/리스폰/게임오버
   - 점수 누적 및 재시작
+  - **오브젝트 풀링**으로 런타임 Instantiate/Destroy 제거
 
 ## 개발 환경
 
@@ -87,7 +88,7 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 ### 폭탄 스킬
 
 - 마우스 오른쪽 버튼으로 폭탄 스킬 사용 (`boomCount > 0`일 때만 가능)
-- 사용 시 화면 내 모든 적(`Enemy`)·적 총알(`EnemyBullet`) 즉시 제거
+- 사용 시 화면 내 모든 적(`Enemy`)·적 총알(`EnemyBullet`) 즉시 풀로 반환
 - `SkillBoomPrefab` 이펙트가 2초간 표시된 후 자동 제거
 - 사용 후 `boomCount` 1 감소, UI 폭탄 아이콘 갱신
 
@@ -108,6 +109,44 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 - 마지막 라이프 소모 시 GameOver 패널 활성화
 - Retry 버튼으로 현재 씬 재로드
 
+## 오브젝트 풀링
+
+런타임 중 `Instantiate` / `Destroy` 호출을 제거하고, 씬 시작 시 미리 생성해둔 오브젝트를 재사용합니다.
+
+### ObjectPoolManager
+
+`ObjectPoolManager` (싱글톤)가 모든 풀을 관리합니다.
+
+| 풀 | 프리팹 | 초기 수량 |
+|---|---|---|
+| playerBullet0 | PlayerBullet0Prefab | 20 |
+| playerBullet1 | PlayerBullet1Prefab | 20 |
+| enemyA | EnemyAPrefab | 10 |
+| enemyB | EnemyBPrefab | 10 |
+| enemyC | EnemyCPrefab | 20 |
+| enemyBullet0 | EnemyBullet0Prefab | 20 |
+| itemCoin | ItemCoinPrefab | 20 |
+| itemPower | ItemPowerPrefab | 10 |
+| itemBoom | ItemBoomPrefab | 10 |
+
+### 풀 사용 규칙
+
+- **꺼내기**: `Get~()` 메서드 → 위치 설정 → `SetActive(true)`
+- **반환**: `ReleaseBullet()` / `ReleaseEnemy()` / `ReleaseItem()` 호출 (`SetActive(false)` + 위치 초기화)
+- `Destroy()`를 직접 호출하면 리스트에 파괴된 참조가 남아 `MissingReferenceException`이 발생하므로 반드시 `Release~()` 사용
+
+### 오브젝트별 활성화 순서
+
+```
+Enemy    : 위치 설정 → SetActive(true) [OnEnable: 상태 초기화] → StartMove()
+EnemyBullet: 위치 설정 → StartMove() → SetActive(true)
+PlayerBullet: 위치/회전 설정 → SetActive(true)
+Item     : 위치 설정 → SetActive(true)
+```
+
+> Enemy는 `OnEnable()`에서 체력·이동 플래그를 초기화하기 때문에
+> `SetActive(true)` 이후에 `StartMove()`를 호출해야 합니다.
+
 ## 씬/오브젝트 구성 (핵심)
 
 메인 플레이 씬:
@@ -117,15 +156,17 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 - `Player`
 - `GameManager`
 - `UIManager`
+- `ObjectPoolManager`
 - `AreaDrawer`
+- `BackgroundManager`
 
 주요 프리팹:
-- `Assets/Enemy A.prefab` (`Enemy` 태그)
-- `Assets/Enemy B.prefab` (`Enemy` 태그)
-- `Assets/Enemy C.prefab` (`Enemy` 태그)
-- `Assets/EnemyBulletPrefab.prefab` (`EnemyBullet` 태그)
-- `Assets/PlayerBullet0Prefab.prefab` (`PlayerBullet` 태그)
-- `Assets/PlayerBullet1Prefab.prefab` (`PlayerBullet` 태그)
+- `Assets/Prefabs/EnemyAPrefab.prefab` (`Enemy` 태그)
+- `Assets/Prefabs/EnemyBPrefab.prefab` (`Enemy` 태그)
+- `Assets/Prefabs/EnemyCPrefab.prefab` (`Enemy` 태그)
+- `Assets/Prefabs/EnemyBullet0Prefab.prefab` (`EnemyBullet` 태그)
+- `Assets/Prefabs/PlayerBullet0Prefab.prefab` (`PlayerBullet` 태그)
+- `Assets/Prefabs/PlayerBullet1Prefab.prefab` (`PlayerBullet` 태그)
 - `Assets/Prefabs/ItemCoinPrefab.prefab` (`Item` 태그)
 - `Assets/Prefabs/ItemPowerPrefab.prefab` (`Item` 태그)
 - `Assets/Prefabs/ItemBoomPrefab.prefab` (`Item` 태그)
@@ -140,20 +181,35 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
   - 아이템 획득 처리 (Coin / Power / Boom)
   - 폭탄 스킬(`CreateSkillBoom`) 실행 및 쿨타임 관리
   - 피격 시 UIManager와 연동해 라이프 감소/리스폰
+  - 총알은 `ObjectPoolManager.GetPlayerBullet0/1()`로 풀에서 꺼내 사용
 
 - `Assets/Scripts/Enemy.cs`
   - 적 이동, 피격/사망, 타입별 동작
-  - C 타입의 2연장 총알 발사 처리
-  - 사망 시 `GameManager.CreateItem()` 호출로 아이템 드랍
+  - `OnEnable()`에서 체력·이동 상태 초기화 (풀 재사용 대응)
+  - C 타입의 2연장 총알 발사 — `ObjectPoolManager.GetEnemyBullet0()` 사용
+  - 사망/경계 이탈 시 `ObjectPoolManager.ReleaseEnemy()` 로 풀 반환
 
 - `Assets/Scripts/GameManager.cs`
-  - 랜덤 적 생성 (상단/사이드)
-  - 스폰 위치/방향 선택
-  - 확률 기반 아이템 드랍 (`CreateItem`) — None 30% / Coin 30% / Power 20% / Boom 20%
+  - 랜덤 적 생성 — `ObjectPoolManager.GetEnemy~()` 사용
+  - 스폰 위치/방향 선택 후 `SetActive(true)` → `StartMove()` 순서 보장
+  - 확률 기반 아이템 드랍 (`CreateItem`) — `ObjectPoolManager.GetItem()` 사용
+
+- `Assets/Scripts/ObjectPoolManager.cs`
+  - 모든 게임 오브젝트의 풀 관리 (싱글톤)
+  - `Awake()`에서 `instance` 등록, `Start()`에서 풀 초기화
+  - Get / Release 메서드 제공
 
 - `Assets/Scripts/Item.cs`
   - 아이템 타입 정의 (`Coin`, `Power`, `Boom`)
-  - 화면 아래 이탈 시 자동 파괴
+  - 화면 아래 이탈 시 `ObjectPoolManager.ReleaseItem()` 으로 풀 반환
+
+- `Assets/Scripts/EnemyBullet.cs`
+  - 적 총알 이동
+  - 화면 이탈 시 `ObjectPoolManager.ReleaseBullet()` 으로 풀 반환
+
+- `Assets/Scripts/PlayerBullet.cs`
+  - 플레이어 총알 이동
+  - 화면 이탈 시 `ObjectPoolManager.ReleaseBullet()` 으로 풀 반환
 
 - `Assets/Scripts/EnemySpawner.cs`
   - 사이드 스폰 지점의 시작/종료점 기반 이동 방향 계산
@@ -164,56 +220,49 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
   - 점수 반영 (`AddScore`, `AddScoreByEnemyType`)
   - 게임오버/재시작 처리
 
-- `Assets/PlayerBullet.cs`, `Assets/EnemyBullet.cs`
-  - 총알 이동 및 화면 이탈 시 파괴
+- `Assets/Scripts/BackgroundManager.cs`
+  - 배경 스프라이트 스크롤 처리 (무한 루프)
 
-- `Assets/AreaDrawer.cs`
+- `Assets/Scripts/AreaDrawer.cs`
   - 플레이 경계 계산 및 경계 밖 판정
 
 ### 보조/테스트 스크립트
 
-- `Assets/DrawArrow.cs`: 디버그 화살표 시각화
-- `Assets/Grammar.cs`, `Assets/Test.cs`, `Assets/Test2.cs`, `Assets/App.cs`, `Assets/Programs.cs`: 실험/학습용 코드 성격
+- `Assets/Scripts/DrawArrow.cs`: 디버그 화살표 시각화
+- `Assets/Scripts/Grammar.cs`, `Assets/Scripts/Test.cs`, `Assets/Scripts/Test2.cs`, `Assets/Scripts/App.cs`, `Assets/Scripts/Programs.cs`: 실험/학습용 코드
 
 ## 인스펙터 설정 체크리스트
 
-플레이 전에 아래 연결을 확인하면 문제를 줄일 수 있습니다.
+- **ObjectPoolManager**
+  - 각 프리팹 슬롯에 해당 Prefab 할당 필수
 
-- Player
-  - `firePoint`, `sideBulletPrefab`, `centerBulletPrefab` 할당
+- **Player**
+  - `firePoint` 할당
+  - `skillBoomPrefab` 할당
   - `respawnDelay` 값 설정
 
-- Enemy(C)
-  - `bulletPrefab` 할당
+- **Enemy(C)**
   - `firePoints` 배열에 최소 2개 Transform 지정
 
-- GameManager
-  - `enemies` 배열에 A/B/C 프리팹 등록
+- **GameManager**
   - `spawnPoints`, `spawners` 등록
 
-- UIManager
+- **UIManager**
   - 라이프 아이콘 배열(`images`)
-  - 폭탄 아이콘 배열(`booms`) — alpha 0/1로 갯수 표현
+  - 폭탄 아이콘 배열(`booms`) — alpha 0/1로 개수 표현
   - `gameOverPanel`, `retryButton`, `scoreText` 연결
 
-- GameManager
-  - `itemPrefabs` 배열에 **Coin[0], Power[1], Boom[2]** 순서로 프리팹 등록
-
-- Player
-  - `skillBoomPrefab` 할당
-
-- AreaDrawer
+- **AreaDrawer**
   - `topLeft`, `topRight`, `bottomLeft`, `bottomRight` 지정
 
-## 빌드 설정
-
-- Build Settings에 등록된 씬:
-  - `Assets/Scenes/GameScene.unity`
+- **BackgroundManager**
+  - `backgrounds` 배열에 배경 Transform 등록
+  - `speed` 값 설정
 
 ## 알려진 주의사항
 
-- 프로젝트 최초 커밋 이후에는 Unity 생성 폴더(`Library`, `Temp`, `Logs` 등)가 `.gitignore`로 제외되도록 관리하는 것을 권장합니다.
-- `EnemyBullet.cs`의 `isMove` 플래그는 현재 이동 여부 제어에 직접 사용되지 않으므로, 추후 필요 시 정리 가능합니다.
+- 풀에서 꺼낸 오브젝트는 반드시 `Release~()` 로 반환해야 합니다. `Destroy()` 직접 호출 시 풀 리스트에 파괴된 참조가 남아 `MissingReferenceException`이 발생합니다.
+- `EnemyBullet.cs`의 `isMove` 플래그는 현재 이동 여부 제어에 직접 사용되지 않으므로 추후 정리 가능합니다.
 
 ## 향후 개선 아이디어
 
@@ -222,6 +271,7 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 - 플레이어 무적 시간/피격 이펙트
 - 사운드, 폭발 이펙트, 카메라 쉐이크 추가
 - 스테이지/웨이브 시스템 도입
+- 풀 동적 확장 (풀 소진 시 자동으로 오브젝트 추가 생성)
 
 ## 라이선스
 

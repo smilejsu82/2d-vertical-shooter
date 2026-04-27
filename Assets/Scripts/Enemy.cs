@@ -16,14 +16,27 @@ public class Enemy : MonoBehaviour
     [SerializeField] private float speedC = 1f;
     private float speed = 1f;
     public int health;
+    private int _initialHealth;
     public Sprite[] sprites;
     public EnemyType enemyType;
-    public GameObject bulletPrefab;
     public Transform[] firePoints;
     private float delta = 0;
     private bool isDead = false;
 
     public float gap = 0.1f;
+    void Awake()
+    {
+        _initialHealth = health;
+    }
+
+    private void OnEnable()
+    {
+        health = _initialHealth;
+        isDead = false;
+        delta = 0;
+        isMove = false;
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -62,7 +75,7 @@ public class Enemy : MonoBehaviour
         }
 
         if (AreaDrawer.Instance != null && AreaDrawer.Instance.IsOutOfBounds(transform.position))
-            Destroy(gameObject);
+            ObjectPoolManager.instance.ReleaseEnemy(gameObject);
     }
 
     private void Fire()
@@ -70,20 +83,21 @@ public class Enemy : MonoBehaviour
         var playerGo = GameObject.Find("Player");
         if (playerGo != null && firePoints != null && firePoints.Length >= 2)
         {
-            GameObject bulletGo1 = Instantiate(bulletPrefab);
-            bulletGo1.transform.position = firePoints[0].position;
-            var bullet1 = bulletGo1.GetComponent<EnemyBullet>();
-            var dir1 = playerGo.transform.position - transform.position;
-            bullet1.StartMove(dir1.normalized);
-            
-            
-            GameObject bulletGo2 = Instantiate(bulletPrefab);
-            bulletGo2.transform.position = firePoints[1].position;
-            var bullet2 = bulletGo2.GetComponent<EnemyBullet>();
-            var dir2 = playerGo.transform.position - transform.position;
-            bullet2.StartMove(dir2.normalized);
-            
+            var dir = (playerGo.transform.position - transform.position).normalized;
+
+            SpawnEnemyBullet(firePoints[0].position, dir);
+            SpawnEnemyBullet(firePoints[1].position, dir);
         }
+    }
+
+    private void SpawnEnemyBullet(Vector3 position, Vector3 dir)
+    {
+        GameObject bulletGo = ObjectPoolManager.instance.GetEnemyBullet0();
+        if (bulletGo == null) return;
+
+        bulletGo.transform.position = position;
+        bulletGo.GetComponent<EnemyBullet>().StartMove(dir);
+        bulletGo.SetActive(true);
     }
 
     private void Hit(int damage)
@@ -113,7 +127,7 @@ public class Enemy : MonoBehaviour
             
         GameManager.instance.CreateItem(transform.position);
 
-        Destroy(gameObject);
+        ObjectPoolManager.instance.ReleaseEnemy(gameObject);
     }
 
     private Vector3 dir;
@@ -138,8 +152,8 @@ public class Enemy : MonoBehaviour
         {
             PlayerBullet playerBullet = other.gameObject.GetComponent<PlayerBullet>();
             Hit(playerBullet.damage);
-            
-            Destroy(other.gameObject);
+
+            ObjectPoolManager.instance.ReleaseBullet(other.gameObject);
         }
     }
 }
