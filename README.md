@@ -10,13 +10,14 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 - 엔진: Unity 6
 - 핵심 플레이:
   - 플레이어 이동 + 연사
-  - 랜덤 적 스폰(상단/사이드)
+  - **JSON 스테이지 데이터 기반** 적 스폰 (상단/사이드, delay 제어)
   - 적 타입별 속도/행동 차이
   - 아이템 드랍 및 획득 (Coin / Power / Boom)
   - 폭탄 스킬로 화면 내 적 전부 제거
   - 라이프 감소/리스폰/게임오버
   - 점수 누적 및 재시작
   - **오브젝트 풀링**으로 런타임 Instantiate/Destroy 제거
+  - **무한 배경 스크롤** (BackGround + BackgroundGroup 분리 구조)
 
 ## 개발 환경
 
@@ -63,9 +64,17 @@ Unity 2D 기반 세로 스크롤 슈팅 프로젝트입니다.
 
 ### 적
 
-- 적은 `GameManager`에서 랜덤 생성됩니다.
-  - 상단 스폰 후 아래 이동 또는
-  - 사이드 스폰 후 지정 방향 이동
+- 적은 `GameManager`가 `stage_data.json`을 읽어 순서대로 생성합니다.
+  - `isSpawner: false` → 상단 `spawnPoints[point]`에서 아래 방향 이동
+  - `isSpawner: true`  → 사이드 `spawners[point]`의 startPoint → endPoint 방향 이동
+- 스테이지는 4개 페이즈로 구성됩니다.
+
+| 페이즈 | 적 구성 | delay |
+|---|---|---|
+| Phase 1 (도입) | A타입만 | 2.0~2.5s |
+| Phase 2 (중반) | A + B 혼합 | 1.0~1.5s |
+| Phase 3 (후반) | B + C 혼합, 사이드 등장 | 0.5~1.0s |
+| Phase 4 (클라이맥스) | 전 타입 러시, 사이드 집중 | 0.3~0.5s |
 - 타입별 이동 속도(현재 코드 기본값):
   - C: 가장 느림 (`speedC = 1f`)
   - A: 중간 (`speedA = 2f`)
@@ -190,9 +199,18 @@ Item     : 위치 설정 → SetActive(true)
   - 사망/경계 이탈 시 `ObjectPoolManager.ReleaseEnemy()` 로 풀 반환
 
 - `Assets/Scripts/GameManager.cs`
-  - 랜덤 적 생성 — `ObjectPoolManager.GetEnemy~()` 사용
-  - 스폰 위치/방향 선택 후 `SetActive(true)` → `StartMove()` 순서 보장
+  - `Start()`에서 `DataManager.LoadData()` 호출 후 `SpawnRoutine` 코루틴 시작
+  - `SpawnData.isSpawner` 값에 따라 상단/사이드 스폰 분기
+  - `SetActive(true)` → `StartMove()` 순서 보장
   - 확률 기반 아이템 드랍 (`CreateItem`) — `ObjectPoolManager.GetItem()` 사용
+
+- `Assets/Scripts/DataManager.cs`
+  - 싱글톤. `Resources/stage_data.json`을 로드해 `List<SpawnData>`로 역직렬화
+  - `GetSpawnDatas()`로 외부에 데이터 제공
+
+- `Assets/Scripts/SpawnData.cs`
+  - `stage_data.json` 한 항목에 대응하는 데이터 구조
+  - `delay` (대기 시간), `type` → `enemyType` (StringEnumConverter), `point` (인덱스), `isSpawner` (스폰 방식)
 
 - `Assets/Scripts/ObjectPoolManager.cs`
   - 모든 게임 오브젝트의 풀 관리 (싱글톤)
@@ -221,7 +239,14 @@ Item     : 위치 설정 → SetActive(true)
   - 게임오버/재시작 처리
 
 - `Assets/Scripts/BackgroundManager.cs`
-  - 배경 스프라이트 스크롤 처리 (무한 루프)
+  - 배경 스프라이트 스크롤 처리 (무한 루프, 레거시)
+
+- `Assets/Scripts/BackGround.cs`
+  - 각 배경 오브젝트에 부착. 매 프레임 아래로 이동
+
+- `Assets/Scripts/BackgroundGroup.cs`
+  - 배경 그룹 부모 오브젝트에 부착
+  - 카메라 하단 기준선을 감시하다가 가장 낮은 배경을 가장 위로 재배치 (무한 루프)
 
 - `Assets/Scripts/AreaDrawer.cs`
   - 플레이 경계 계산 및 경계 밖 판정
@@ -245,7 +270,13 @@ Item     : 위치 설정 → SetActive(true)
   - `firePoints` 배열에 최소 2개 Transform 지정
 
 - **GameManager**
-  - `spawnPoints`, `spawners` 등록
+  - `spawnPoints` — `stage_data.json`의 `point` 인덱스에 대응하는 상단 스폰 위치 (5개 권장)
+  - `spawners` — 사이드 스폰용 `EnemySpawner` 배열 (최소 2개)
+  - 같은 씬에 `DataManager` 컴포넌트 필수
+
+- **BackgroundGroup** (신규)
+  - `backgrounds` 배열에 배경 오브젝트 Transform 등록 (2개 이상)
+  - 각 배경 오브젝트에 `BackGround` 컴포넌트 부착 + `speed` 설정
 
 - **UIManager**
   - 라이프 아이콘 배열(`images`)
@@ -266,12 +297,12 @@ Item     : 위치 설정 → SetActive(true)
 
 ## 향후 개선 아이디어
 
-- 난이도 곡선(시간/점수 기반 스폰 주기 조정)
-- 적 패턴 다양화(곡선 이동, 탄막 패턴)
+- 멀티 스테이지 (stage_data_1.json, stage_data_2.json … 순차 로드)
+- 적 패턴 다양화 (곡선 이동, 탄막 패턴)
 - 플레이어 무적 시간/피격 이펙트
 - 사운드, 폭발 이펙트, 카메라 쉐이크 추가
-- 스테이지/웨이브 시스템 도입
 - 풀 동적 확장 (풀 소진 시 자동으로 오브젝트 추가 생성)
+- 패럴랙스 배경 (레이어별 다른 속도 스크롤)
 
 ## 라이선스
 

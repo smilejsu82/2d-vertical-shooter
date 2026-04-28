@@ -1,78 +1,70 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
-using Object = System.Object;
 using Random = UnityEngine.Random;
 
 public class GameManager : MonoBehaviour
 {
-    //싱글톤으로 만들기 
     public static GameManager instance;
-    public Transform[] spawnPoints; //위에서 아래로 내려오는 위치 
-    public EnemySpawner[]  spawners;    //사이드 위치
-
-    private float delta = 0;
-
-    private int span = 0;
+    public Transform[] spawnPoints; // 위에서 아래로 내려오는 위치 (point 인덱스에 대응)
+    public EnemySpawner[] spawners; // 사이드 위치
 
     private void Awake()
     {
         instance = this;
     }
 
-
-    void Update()
+    void Start()
     {
-        delta += Time.deltaTime;
-        
-        if (delta > span)
-        {
-            //만들어라 
-            CreateEnemy();
-            delta = 0;
-        
-            span = Random.Range(1, 4);  //1, 2, 3
-        }
+        // stage_data 로드 후 순서대로 적기 스폰
+        DataManager.Instance.LoadData();
+        List<SpawnData> datas = DataManager.Instance.GetSpawnDatas();
+        StartCoroutine(SpawnRoutine(datas));
     }
 
-    private void CreateEnemy()
+    private IEnumerator SpawnRoutine(List<SpawnData> datas)
     {
-        var enemyType = (Enemy.EnemyType) Random.Range(0, 3);  // 0~2 (A, B, C)
-        GameObject enemyGo = null;
-        switch (enemyType)
+        foreach (SpawnData data in datas)
         {
-            case Enemy.EnemyType.A:
-                enemyGo = ObjectPoolManager.instance.GetEnemyA();
-                break;
-            case Enemy.EnemyType.B:
-                enemyGo = ObjectPoolManager.instance.GetEnemyB();
-                break;
-            case Enemy.EnemyType.C:
-                enemyGo = ObjectPoolManager.instance.GetEnemyC();
-                break;
+            // delay(초)만큼 대기
+            yield return new WaitForSeconds(data.delay);
+
+            // enemyType에 맞는 적기를 오브젝트 풀에서 가져오기
+            GameObject enemyGo = null;
+            switch (data.enemyType)
+            {
+                case Enemy.EnemyType.A:
+                    enemyGo = ObjectPoolManager.instance.GetEnemyA();
+                    break;
+                case Enemy.EnemyType.B:
+                    enemyGo = ObjectPoolManager.instance.GetEnemyB();
+                    break;
+                case Enemy.EnemyType.C:
+                    enemyGo = ObjectPoolManager.instance.GetEnemyC();
+                    break;
+            }
+
+            // 풀 소진 시 스킵
+            if (enemyGo == null) continue;
+
+            // isSpawner에 따라 스폰 위치와 이동 방향 결정
+            Vector3 moveDir;
+            if (data.isSpawner)
+            {
+                EnemySpawner spawner = spawners[data.point];
+                enemyGo.transform.position = spawner.startPoint.position;                               // 1. startPoint에 배치
+                moveDir = (spawner.endPoint.position - spawner.startPoint.position).normalized;         // start → end 방향
+            }
+            else
+            {
+                enemyGo.transform.position = spawnPoints[data.point].position; // 1. 위치 먼저 (상단)
+                moveDir = Vector2.down;
+            }
+
+            enemyGo.SetActive(true);                                // 2. 활성화 (OnEnable 실행)
+            enemyGo.GetComponent<Enemy>().StartMove(moveDir);       // 3. 이동 시작
         }
-
-        if (enemyGo == null) return;    // 풀 소진 시 스킵
-
-        var dice = Random.Range(0, 2);  //0 또는 1 
-        //만약에 0 이라면 위에서 아래로 내려오는거고 
-        //1 이라면 사이드 위치를 잡아야 함
-
-        Vector3 moveDir;
-        if (dice == 0)
-        {
-            Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Length)];
-            enemyGo.transform.position = spawnPoint.position;  // 1. 위치 먼저
-            moveDir = Vector2.down;
-        }
-        else
-        {
-            EnemySpawner spawner = spawners[Random.Range(0, spawners.Length)];
-            enemyGo.transform.position = spawner.startPoint.position;  // 1. 위치 먼저
-            moveDir = spawner.GetDir();
-        }
-
-        enemyGo.SetActive(true);                                        // 2. 활성화 (OnEnable 실행)
-        enemyGo.GetComponent<Enemy>().StartMove(moveDir);               // 3. 이동 시작
     }
 
     public void CreateItem(Vector3 tpos)
